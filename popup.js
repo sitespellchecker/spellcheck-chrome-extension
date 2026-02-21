@@ -155,8 +155,13 @@ document.addEventListener('DOMContentLoaded', async () => {
       // Show checking status
       showLoading('Checking spelling...');
 
-      // Send check command
-      const response = await chrome.tabs.sendMessage(current.tabId, { action: 'check' });
+      // Send check command with timeout
+      const response = await Promise.race([
+        chrome.tabs.sendMessage(current.tabId, { action: 'check' }),
+        new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Spell check timed out')), 30000)
+        )
+      ]);
       
       if (response && response.success) {
         currentResults = response.errors;

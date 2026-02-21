@@ -2,7 +2,7 @@
 let dictionary = null;
 let isChecking = false;
 
-// Load dictionary using Typo.js
+// Load dictionary using Typo.js with timeout
 async function loadDictionary() {
   if (dictionary) return true;
   
@@ -13,28 +13,37 @@ async function loadDictionary() {
       return false;
     }
     
-    // Load aff and dic files
-    const affUrl = chrome.runtime.getURL('lib/en_US.aff');
-    const dicUrl = chrome.runtime.getURL('lib/en_US.dic');
+    // Load aff and dic files with timeout
+    const DICT_TIMEOUT = 10000; // 10 seconds
     
-    const [affResponse, dicResponse] = await Promise.all([
-      fetch(affUrl),
-      fetch(dicUrl)
-    ]);
+    const loadWithTimeout = async () => {
+      const affUrl = chrome.runtime.getURL('lib/en_US.aff');
+      const dicUrl = chrome.runtime.getURL('lib/en_US.dic');
+      
+      const [affResponse, dicResponse] = await Promise.all([
+        fetch(affUrl),
+        fetch(dicUrl)
+      ]);
+      
+      if (!affResponse.ok || !dicResponse.ok) {
+        throw new Error('Dictionary files not found');
+      }
+      
+      const affData = await affResponse.text();
+      const dicData = await dicResponse.text();
+      
+      // Initialize Typo with loaded data
+      dictionary = new Typo('en_US', affData, dicData);
+      return true;
+    };
     
-    if (!affResponse.ok || !dicResponse.ok) {
-      console.error('Dictionary files not found');
-      return false;
-    }
+    const timeout = new Promise((_, reject) => 
+      setTimeout(() => reject(new Error('Dictionary loading timed out')), DICT_TIMEOUT)
+    );
     
-    const affData = await affResponse.text();
-    const dicData = await dicResponse.text();
-    
-    // Initialize Typo with loaded data
-    dictionary = new Typo('en_US', affData, dicData);
-    
+    const result = await Promise.race([loadWithTimeout(), timeout]);
     console.log('Typo dictionary loaded successfully');
-    return true;
+    return result;
     
   } catch (error) {
     console.error('Error loading dictionary:', error);
@@ -262,6 +271,11 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       dictionaryLoaded: !!dictionary
     });
   }
+});
+
+// Preload dictionary on script load
+loadDictionary().then(loaded => {
+  console.log('Dictionary preloaded:', loaded);
 });
 
 console.log('Site Spell Checker content script loaded with Typo.js');
