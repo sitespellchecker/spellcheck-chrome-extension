@@ -45,16 +45,7 @@ header h1 .logo {
   border-radius: 6px;
 }
 
-.subtitle {
-  font-size: 14px;
-  color: #666;
-  font-style: italic;
-}
 
-.subtitle .highlight {
-  color: #E8B4B4;
-  font-style: italic;
-}
 
 /* Content */
 .content {
@@ -254,19 +245,6 @@ header h1 .logo {
   padding: 16px 20px;
   background: #f5f0e8;
   border-top: 1px solid #e5e2dc;
-}
-
-.upsell h2 {
-  font-size: 14px;
-  font-weight: 600;
-  color: #333;
-  margin-bottom: 4px;
-}
-
-.upsell p {
-  font-size: 13px;
-  color: #666;
-  margin-bottom: 12px;
 }
 
 .btn-upsell {
