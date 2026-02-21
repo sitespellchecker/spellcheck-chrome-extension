@@ -142,7 +142,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     checkBtn.disabled = true;
-    showLoading('Analyzing page...');
 
     try {
       // Clear previous highlights
@@ -153,7 +152,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
 
       // Show checking status
-      showLoading('Checking spelling...');
+      showLoading('Scanning page...');
 
       // Send check command with timeout
       const response = await Promise.race([
