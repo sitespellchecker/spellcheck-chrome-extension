@@ -1,4 +1,4 @@
-// Site Spellchecker - Using Typo.js with Hunspell dictionaries
+// Site Spell Checker - Using Typo.js with Hunspell dictionaries
 let dictionary = null;
 let isChecking = false;
 
@@ -264,4 +264,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   }
 });
 
-console.log('Site Spellchecker content script loaded with Typo.js');
+console.log('Site Spell Checker content script loaded with Typo.js');

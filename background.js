@@ -1,5 +1,5 @@
 chrome.runtime.onInstalled.addListener(() => {
-  console.log('Site Spellchecker extension installed');
+  console.log('Site Spell Checker extension installed');
 });
 
 chrome.action.onClicked.addListener((tab) => {
