@@ -1,0 +1,25 @@
+# IDE / Editor
+.cursor/
+.vscode/
+.idea/
+
+# Dependencies
+node_modules/
+package-lock.json
+yarn.lock
+
+# Build artifacts
+*.zip
+dist/
+build/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Local dev
+.env
+.env.local

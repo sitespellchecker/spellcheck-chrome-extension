@@ -1,0 +1,42 @@
+name: Release Chrome Extension
+
+on:
+  push:
+    tags:
+      - 'v*'  # Triggers on v1.0.0, v1.1.0, etc.
+
+  workflow_dispatch:  # Manual trigger option
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from manifest
+        id: version
+        run: |
+          VERSION=$(jq -r .version manifest.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create extension zip
+        run: |
+          # Create zip excluding files in .gitignore plus additional dev files
+          zip -r site-spellchecker.zip . \
+            -x@<(git ls-files --others --ignored --exclude-standard) \
+            -x ".git/*" \
+            -x ".github/*" \
+            -x "scripts/*" \
+            -x "*.md" \
+            -x ".gitignore"
+
+      - name: Upload to Chrome Web Store
+        uses: wdzeng/chrome-webstore-upload@v1
+        with:
+          extension-id: ${{ secrets.CHROME_EXTENSION_ID }}
+          client-id: ${{ secrets.CHROME_CLIENT_ID }}
+          client-secret: ${{ secrets.CHROME_CLIENT_SECRET }}
+          refresh-token: ${{ secrets.CHROME_REFRESH_TOKEN }}
+          file-path: ./site-spellchecker.zip
+          publish: false  # Set to true for auto-publish (skips review for trusted testers)
