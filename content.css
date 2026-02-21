@@ -1,13 +1,13 @@
-/* Spellcheck highlights */
+/* Spellcheck highlights - Matching Website Design */
 .spellcheck-highlight {
-  background-color: rgba(255, 82, 82, 0.25);
-  border-bottom: 2px wavy #ff5252;
+  background-color: rgba(232, 180, 180, 0.35);
+  border-bottom: 2px wavy #E8B4B4;
   cursor: help;
   position: relative;
 }
 
 .spellcheck-highlight:hover {
-  background-color: rgba(255, 82, 82, 0.4);
+  background-color: rgba(232, 180, 180, 0.5);
 }
 
 /* Tooltip styles */
