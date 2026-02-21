@@ -1,67 +1,87 @@
-// Store for check results
+// Popup script with loading states and better UX
 let currentResults = null;
 let currentUrl = null;
 
-// Get current domain for upsell link
-async function getCurrentDomain() {
+// Get current tab info
+async function getCurrentTab() {
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab && tab.url) {
-      const url = new URL(tab.url);
       return {
-        domain: url.hostname.replace(/^www\./, ''),
+        domain: new URL(tab.url).hostname.replace(/^www\./, ''),
         fullUrl: tab.url,
         tabId: tab.id
       };
     }
   } catch (e) {
-    console.log('Could not get domain');
+    console.log('Could not get tab info:', e);
   }
   return null;
 }
 
-// Check if we have results for current page
-async function checkExistingResults() {
-  const current = await getCurrentDomain();
+// Check for cached results
+async function loadCachedResults() {
+  const current = await getCurrentTab();
   if (!current) return false;
   
-  // Check if we have results for this URL
-  if (currentResults && currentUrl === current.fullUrl) {
-    return true;
+  try {
+    const key = `spellcheck_results_${current.fullUrl}`;
+    const result = await chrome.storage.session.get([key]);
+    const cached = result[key];
+    
+    if (cached && Date.now() - cached.timestamp < 300000) { // 5 min cache
+      currentResults = cached.errors;
+      currentUrl = current.fullUrl;
+      return true;
+    }
+  } catch (e) {
+    console.log('No cached results');
   }
-  
   return false;
 }
 
-// Display results in the UI
+// Escape HTML for display
+function escapeHtml(text) {
+  if (!text) return '';
+  const div = document.createElement('div');
+  div.textContent = text;
+  return div.innerHTML;
+}
+
+// Display results in UI
 function displayResults(errors) {
   const resultsDiv = document.getElementById('results');
   
   if (errors.length === 0) {
     resultsDiv.innerHTML = `
-      <p class="hint" style="color: #4caf50;">
-        ✓ No spelling errors found!
-      </p>
+      <div class="success-message">
+        <span class="success-icon">✓</span>
+        <p>No spelling errors found!</p>
+      </div>
     `;
     return;
   }
 
-  const errorList = errors.slice(0, 10).map(err => {
+  // Show first 15 errors
+  const displayErrors = errors.slice(0, 15);
+  const errorList = displayErrors.map(err => {
     const suggestions = err.suggestions?.length 
-      ? `<div class="suggestions">Did you mean: ${err.suggestions.join(', ')}</div>`
+      ? `<div class="suggestions">Did you mean: ${err.suggestions.map(s => `<span class="suggestion">${escapeHtml(s)}</span>`).join(', ')}</div>`
       : '';
     
     return `
       <li class="error-item">
-        <span class="error-word">${escapeHtml(err.word)}</span>
+        <div class="error-header">
+          <span class="error-word">${escapeHtml(err.word)}</span>
+        </div>
         <span class="error-context">${escapeHtml(err.context)}</span>
         ${suggestions}
       </li>
     `;
   }).join('');
 
-  const more = errors.length > 10 
-    ? `<p class="hint" style="margin-top: 8px;">...and ${errors.length - 10} more errors</p>` 
+  const more = errors.length > 15 
+    ? `<p class="more-errors">...and ${errors.length - 15} more errors on this page</p>` 
     : '';
 
   resultsDiv.innerHTML = `
@@ -71,11 +91,26 @@ function displayResults(errors) {
   `;
 }
 
-function escapeHtml(text) {
-  if (!text) return '';
-  const div = document.createElement('div');
-  div.textContent = text;
-  return div.innerHTML;
+// Show loading state
+function showLoading(message = 'Loading dictionary...') {
+  const resultsDiv = document.getElementById('results');
+  resultsDiv.innerHTML = `
+    <div class="loading">
+      <div class="spinner"></div>
+      <p>${message}</p>
+    </div>
+  `;
+}
+
+// Show error state
+function showError(message) {
+  const resultsDiv = document.getElementById('results');
+  resultsDiv.innerHTML = `
+    <div class="error-message">
+      <span class="error-icon">⚠</span>
+      <p>${message}</p>
+    </div>
+  `;
 }
 
 // Main initialization
@@ -85,57 +120,47 @@ document.addEventListener('DOMContentLoaded', async () => {
   const upsellLink = document.getElementById('upsellLink');
 
   // Set up upsell link
-  const domainInfo = await getCurrentDomain();
-  if (domainInfo) {
-    upsellLink.href = `https://sitespellchecker.com/site-scans/checkout?domain=${encodeURIComponent(domainInfo.domain)}`;
+  const tabInfo = await getCurrentTab();
+  if (tabInfo) {
+    upsellLink.href = `https://sitespellchecker.com?domain=${encodeURIComponent(tabInfo.domain)}&utm_source=extension&utm_medium=popup`;
   }
 
-  // Check if we have existing results for this page
-  const hasExisting = await checkExistingResults();
-  if (hasExisting) {
+  // Check for cached results
+  const hasCached = await loadCachedResults();
+  if (hasCached) {
     displayResults(currentResults);
     checkBtn.textContent = 'Check Again';
   }
 
   // Check button handler
   checkBtn.addEventListener('click', async () => {
+    const current = await getCurrentTab();
+    
+    if (!current || current.fullUrl.startsWith('chrome://') || current.fullUrl.startsWith('edge://') || current.fullUrl.startsWith('about:')) {
+      showError('Cannot check browser internal pages');
+      return;
+    }
+
     checkBtn.disabled = true;
-    checkBtn.textContent = 'Checking...';
+    showLoading('Analyzing page...');
 
     try {
-      const current = await getCurrentDomain();
-      
-      if (!current || !current.fullUrl || current.fullUrl.startsWith('chrome://') || current.fullUrl.startsWith('edge://')) {
-        resultsDiv.innerHTML = '<p class="hint" style="color: #d32f2f;">Cannot check browser internal pages</p>';
-        checkBtn.disabled = false;
-        checkBtn.textContent = 'Check This Page';
-        return;
-      }
-
-      // Clear any previous highlights first
+      // Clear previous highlights
       try {
         await chrome.tabs.sendMessage(current.tabId, { action: 'clear' });
       } catch (e) {
-        // Ignore errors if content script not loaded
+        // Content script might not be loaded yet
       }
 
-      // Inject content script
-      await chrome.scripting.executeScript({
-        target: { tabId: current.tabId },
-        files: ['content.js']
-      });
+      // Show checking status
+      showLoading('Checking spelling...');
 
-      // Wait a bit for script to initialize
-      await new Promise(resolve => setTimeout(resolve, 100));
-
-      // Check spelling
+      // Send check command
       const response = await chrome.tabs.sendMessage(current.tabId, { action: 'check' });
       
       if (response && response.success) {
-        // Store results
         currentResults = response.errors;
         currentUrl = current.fullUrl;
-        
         displayResults(response.errors);
         checkBtn.textContent = 'Check Again';
       } else {
@@ -143,28 +168,27 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch (error) {
       console.error('Error:', error);
-      resultsDiv.innerHTML = `
-        <p class="hint" style="color: #d32f2f;">
-          Could not check page. Try refreshing.
-        </p>
-      `;
+      
+      if (error.message.includes('Could not establish connection')) {
+        showError('Please refresh the page and try again');
+      } else {
+        showError(error.message || 'Could not check page. Try refreshing.');
+      }
     } finally {
       checkBtn.disabled = false;
     }
   });
 });
 
-// Listen for tab updates to clear results when navigating
-chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
-  if (changeInfo.url) {
-    // Clear stored results when URL changes
-    currentResults = null;
-    currentUrl = null;
-  }
-});
-
-// Also clear when active tab changes
+// Clear results when tab changes
 chrome.tabs.onActivated.addListener(() => {
   currentResults = null;
   currentUrl = null;
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
+  if (changeInfo.url) {
+    currentResults = null;
+    currentUrl = null;
+  }
 });

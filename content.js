@@ -1,8 +1,10 @@
-// Site Spellchecker with full dictionary support
+// Site Spellchecker - Performance-Optimized Content Script
 let dictionary = null;
+let typoInstance = null;
 let dictionaryLoaded = false;
+let isChecking = false;
 
-// Common misspellings for quick lookup
+// Common misspellings for quick lookup (keep in memory, small)
 const MISSPELLINGS = {
   'proofreeding': 'proofreading',
   'realy': 'really',
@@ -75,7 +77,6 @@ const MISSPELLINGS = {
   'cemetary': 'cemetery',
   'changable': 'changeable',
   'cheif': 'chief',
-  'commitment': 'commitment',
   'commited': 'committed',
   'completly': 'completely',
   'copywrite': 'copyright',
@@ -110,7 +111,6 @@ const MISSPELLINGS = {
   'pasttime': 'pastime',
   'pavillion': 'pavilion',
   'percieve': 'perceive',
-  'perseverance': 'perseverance',
   'persistance': 'persistence',
   'personel': 'personnel',
   'plagerize': 'plagiarize',
@@ -141,13 +141,56 @@ const MISSPELLINGS = {
   'temperment': 'temperament',
   'tendancy': 'tendency',
   'theif': 'thief',
-  'tommorrow': 'tomorrow',
   'unfortunatly': 'unfortunately'
 };
 
-// Load dictionary from files
+// Efficient dictionary cache
+const DICTIONARY_CACHE_KEY = 'spellcheck_dictionary_cache';
+const DICTIONARY_CACHE_VERSION = '1.0';
+
+// Check if we have a cached dictionary
+async function getCachedDictionary() {
+  try {
+    const result = await chrome.storage.local.get([DICTIONARY_CACHE_KEY]);
+    const cached = result[DICTIONARY_CACHE_KEY];
+    
+    if (cached && cached.version === DICTIONARY_CACHE_VERSION) {
+      console.log(`Using cached dictionary: ${cached.words.length} words`);
+      return new Set(cached.words);
+    }
+  } catch (e) {
+    console.log('No cached dictionary found');
+  }
+  return null;
+}
+
+// Cache dictionary for future use
+async function cacheDictionary(words) {
+  try {
+    await chrome.storage.local.set({
+      [DICTIONARY_CACHE_KEY]: {
+        version: DICTIONARY_CACHE_VERSION,
+        words: Array.from(words),
+        timestamp: Date.now()
+      }
+    });
+    console.log('Dictionary cached successfully');
+  } catch (e) {
+    console.error('Failed to cache dictionary:', e);
+  }
+}
+
+// Load dictionary from files with caching
 async function loadDictionary() {
   if (dictionaryLoaded) return dictionary !== null;
+  
+  // Check cache first
+  const cached = await getCachedDictionary();
+  if (cached) {
+    dictionary = cached;
+    dictionaryLoaded = true;
+    return true;
+  }
   
   try {
     const affUrl = chrome.runtime.getURL('lib/en_US.aff');
@@ -159,20 +202,21 @@ async function loadDictionary() {
     ]);
     
     if (!affResponse.ok || !dicResponse.ok) {
-      console.log('Dictionary files not found, using fallback');
+      console.log('Dictionary files not found');
       dictionaryLoaded = true;
       return false;
     }
     
-    const affData = await affResponse.text();
     const dicData = await dicResponse.text();
     
-    // Parse dictionary words
+    // Parse dictionary words efficiently
     dictionary = new Set();
     const lines = dicData.split('\n');
     
-    // Skip header line and parse words
-    for (let i = 1; i < lines.length; i++) {
+    // Skip header line (first line is count)
+    const wordCount = parseInt(lines[0]) || lines.length - 1;
+    
+    for (let i = 1; i < lines.length && dictionary.size < wordCount; i++) {
       const line = lines[i].trim();
       if (line) {
         // Word format: word/flags or just word
@@ -182,6 +226,10 @@ async function loadDictionary() {
     }
     
     console.log(`Loaded dictionary with ${dictionary.size} words`);
+    
+    // Cache for next time
+    await cacheDictionary(dictionary);
+    
     dictionaryLoaded = true;
     return true;
   } catch (error) {
@@ -191,7 +239,7 @@ async function loadDictionary() {
   }
 }
 
-// Check if word is valid
+// Check if word is valid using multiple strategies
 function isValidWord(word) {
   // Skip short words
   if (word.length < 3) return true;
@@ -202,12 +250,12 @@ function isValidWord(word) {
   // Skip all-caps (acronyms)
   if (/^[A-Z]{2,}$/.test(word)) return true;
   
-  // Skip CamelCase
+  // Skip CamelCase (brand names, etc)
   if (/[a-z][A-Z]/.test(word)) return true;
   
   const lower = word.toLowerCase();
   
-  // Check misspellings list
+  // Check common misspellings first (fast)
   if (MISSPELLINGS[lower]) return false;
   
   // If dictionary is loaded, use it
@@ -215,42 +263,47 @@ function isValidWord(word) {
     // Check exact match
     if (dictionary.has(lower)) return true;
     
-    // Check common variations
-    // Try removing trailing 's' for plurals
+    // Check common variations with regex patterns
+    // Plurals ending in 's'
     if (lower.endsWith('s')) {
       if (dictionary.has(lower.slice(0, -1))) return true;
       if (lower.endsWith('es') && dictionary.has(lower.slice(0, -2))) return true;
       if (lower.endsWith('ies') && dictionary.has(lower.slice(0, -3) + 'y')) return true;
     }
     
-    // Try removing 'ing'
+    // Past tense/participle
+    if (lower.endsWith('ed')) {
+      if (dictionary.has(lower.slice(0, -2))) return true;
+      if (lower.endsWith('ied') && dictionary.has(lower.slice(0, -3) + 'y')) return true;
+    }
+    
+    // Present participle
     if (lower.endsWith('ing')) {
       if (dictionary.has(lower.slice(0, -3))) return true;
       if (dictionary.has(lower.slice(0, -3) + 'e')) return true;
     }
     
-    // Try removing 'ed'
-    if (lower.endsWith('ed')) {
-      if (dictionary.has(lower.slice(0, -2))) return true;
-      if (dictionary.has(lower.slice(0, -3))) return true;
-    }
-    
-    // Try removing 'ly'
+    // Adverbs
     if (lower.endsWith('ly') && dictionary.has(lower.slice(0, -2))) return true;
     
-    // Try removing 'er'/'est'
+    // Comparative/superlative
     if (lower.endsWith('er') && dictionary.has(lower.slice(0, -2))) return true;
     if (lower.endsWith('est') && dictionary.has(lower.slice(0, -3))) return true;
     
-    // Not in dictionary - likely a typo
+    // Not in dictionary - likely misspelled
     return false;
   }
   
-  // Fallback: check for obvious typos
+  // Fallback: basic pattern checks when no dictionary
+  // Too many vowels in a row
   if (/[aeiou]{4,}/i.test(word)) return false;
-  if (/[^aeiouy]{5,}/i.test(word)) return false;
+  // Too many consonants in a row
+  if (/[^aeiouy]{6,}/i.test(word)) return false;
+  // Repeated characters
   if (/([a-z])\1{2,}/i.test(word)) return false;
+  // Q not followed by u
   if (/q[^u]/i.test(word)) return false;
+  // No vowels at all
   if (!/[aeiouy]/i.test(word)) return false;
   
   return true;
@@ -261,26 +314,44 @@ function getSuggestions(word) {
   const lower = word.toLowerCase();
   const suggestions = [];
   
-  // Check misspellings database
+  // Check misspellings database first (fast)
   if (MISSPELLINGS[lower]) {
     suggestions.push(MISSPELLINGS[lower]);
   }
   
   // If dictionary is loaded, find similar words
   if (dictionary && dictionary.size > 0) {
-    // Simple edit distance - try common corrections
-    const candidates = [
-      lower + 'e',      // add 'e'
-      lower.slice(0, -1), // remove last char
-      lower.slice(0, -1) + 'e', // replace last with 'e'
-      lower.replace(/ie$/, 'ei'), // ie -> ei
-      lower.replace(/ei$/, 'ie'), // ei -> ie
-      lower.replace(/ing$/, 'e'), // ing -> e
-      lower + 'ing',    // add ing
-      lower + 'ed',     // add ed
-      lower.slice(0, -1) + 'ed', // change to ed
-    ];
+    // Common edit patterns
+    const candidates = [];
     
+    // Add/remove 'e'
+    if (lower.endsWith('e')) {
+      candidates.push(lower.slice(0, -1));
+    } else {
+      candidates.push(lower + 'e');
+    }
+    
+    // ie/ei swap
+    if (lower.includes('ie')) {
+      candidates.push(lower.replace(/ie/g, 'ei'));
+    }
+    if (lower.includes('ei')) {
+      candidates.push(lower.replace(/ei/g, 'ie'));
+    }
+    
+    // Double letter variations
+    candidates.push(lower.replace(/([a-z])\1/g, '$1'));
+    
+    // Common suffix changes
+    if (lower.endsWith('ing')) {
+      candidates.push(lower.slice(0, -3));
+      candidates.push(lower.slice(0, -3) + 'e');
+    }
+    if (lower.endsWith('ed')) {
+      candidates.push(lower.slice(0, -2));
+    }
+    
+    // Check which candidates are in dictionary
     for (const candidate of candidates) {
       if (dictionary.has(candidate) && !suggestions.includes(candidate)) {
         suggestions.push(candidate);
@@ -292,15 +363,9 @@ function getSuggestions(word) {
   return suggestions.slice(0, 3);
 }
 
-// Main spell check function
-async function checkSpelling() {
-  // Load dictionary first
-  const hasDictionary = await loadDictionary();
-  console.log(`Dictionary loaded: ${hasDictionary} (${dictionary ? dictionary.size : 0} words)`);
-  
-  const errors = [];
-  const seenWords = new Set();
-  
+// Collect all text nodes efficiently (without modifying during iteration)
+function collectTextNodes() {
+  const textNodes = [];
   const walker = document.createTreeWalker(
     document.body,
     NodeFilter.SHOW_TEXT,
@@ -309,89 +374,154 @@ async function checkSpelling() {
         const parent = node.parentElement;
         if (!parent) return NodeFilter.FILTER_REJECT;
         
+        // Skip script/style/code elements
         const tag = parent.tagName;
-        if (['SCRIPT','STYLE','NOSCRIPT','CODE','PRE','TEXTAREA','INPUT'].includes(tag)) {
+        if (['SCRIPT','STYLE','NOSCRIPT','CODE','PRE','TEXTAREA','INPUT','SELECT'].includes(tag)) {
           return NodeFilter.FILTER_REJECT;
         }
         
-        if (parent.classList?.contains('spellcheck-highlight')) {
+        // Skip already highlighted elements
+        if (parent.classList?.contains('spellcheck-highlight') || 
+            parent.closest?.('.spellcheck-highlight')) {
           return NodeFilter.FILTER_REJECT;
         }
         
-        return node.textContent.trim() ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_REJECT;
+        // Skip empty text
+        if (!node.textContent.trim()) return NodeFilter.FILTER_REJECT;
+        
+        return NodeFilter.FILTER_ACCEPT;
       }
     }
   );
 
-  const textNodes = [];
   let node;
   while (node = walker.nextNode()) {
     textNodes.push(node);
   }
-
-  // Process words
-  let count = 0;
-  const maxWords = 2000;
   
-  textNodes.forEach(textNode => {
-    if (count >= maxWords) return;
+  return textNodes;
+}
+
+// Main spell check function - optimized
+async function checkSpelling() {
+  if (isChecking) {
+    return { success: false, error: 'Already checking', errors: [] };
+  }
+  
+  isChecking = true;
+  
+  try {
+    // Load dictionary first (cached)
+    const hasDictionary = await loadDictionary();
+    console.log(`Dictionary ready: ${hasDictionary}, ${dictionary ? dictionary.size : 0} words`);
     
-    const text = textNode.textContent;
-    const words = text.match(/\b[a-zA-Z]{3,}\b/g) || [];
+    const errors = [];
+    const seenWords = new Set();
     
-    words.forEach(word => {
-      if (count >= maxWords) return;
-      count++;
+    // Collect all text nodes first (don't modify while iterating)
+    const textNodes = collectTextNodes();
+    console.log(`Found ${textNodes.length} text nodes to check`);
+    
+    // Process in chunks to avoid blocking UI
+    const CHUNK_SIZE = 100;
+    const MAX_ERRORS = 100;
+    const MAX_WORDS = 5000;
+    let wordCount = 0;
+    
+    for (let i = 0; i < textNodes.length && wordCount < MAX_WORDS; i += CHUNK_SIZE) {
+      const chunk = textNodes.slice(i, i + CHUNK_SIZE);
       
-      const lower = word.toLowerCase();
-      if (seenWords.has(lower)) return;
-      seenWords.add(lower);
-      
-      if (!isValidWord(word)) {
-        const index = text.indexOf(word);
+      // Process this chunk
+      chunk.forEach(textNode => {
+        if (wordCount >= MAX_WORDS || errors.length >= MAX_ERRORS) return;
         
-        if (index !== -1) {
-          const before = text.substring(Math.max(0, index - 12), index);
-          const after = text.substring(index + word.length, index + word.length + 12);
-          const suggestions = getSuggestions(word);
+        const text = textNode.textContent;
+        // Match words with 3+ letters
+        const words = text.match(/\b[a-zA-Z]{3,}\b/g) || [];
+        
+        words.forEach(word => {
+          if (wordCount >= MAX_WORDS || errors.length >= MAX_ERRORS) return;
+          wordCount++;
           
-          errors.push({
-            word,
-            context: (before ? '...' : '') + before + word + after + (after ? '...' : ''),
-            suggestions
-          });
+          const lower = word.toLowerCase();
+          if (seenWords.has(lower)) return;
+          seenWords.add(lower);
           
-          try {
-            const range = document.createRange();
-            range.setStart(textNode, index);
-            range.setEnd(textNode, index + word.length);
-            
-            const span = document.createElement('span');
-            span.className = 'spellcheck-highlight';
-            span.textContent = word;
-            
-            if (suggestions.length > 0) {
-              span.title = `Did you mean: ${suggestions.join(', ')}?`;
-            } else {
-              span.title = 'Possible typo';
+          if (!isValidWord(word)) {
+            const index = text.indexOf(word);
+            if (index !== -1) {
+              const before = text.substring(Math.max(0, index - 15), index);
+              const after = text.substring(index + word.length, index + word.length + 15);
+              const suggestions = getSuggestions(word);
+              
+              errors.push({
+                word,
+                context: (before ? '...' : '') + before + word + after + (after ? '...' : ''),
+                suggestions,
+                textNode,
+                index,
+                wordLength: word.length
+              });
             }
-            
-            range.deleteContents();
-            range.insertNode(span);
-          } catch (e) {
-            // Range might be invalid
           }
+        });
+      });
+      
+      // Yield to event loop every chunk
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+    
+    console.log(`Found ${errors.length} errors in ${wordCount} words`);
+    
+    // Now apply highlights (after collection is complete)
+    errors.forEach(err => {
+      try {
+        const { textNode, index, wordLength } = err;
+        const range = document.createRange();
+        range.setStart(textNode, index);
+        range.setEnd(textNode, index + wordLength);
+        
+        const span = document.createElement('span');
+        span.className = 'spellcheck-highlight';
+        span.textContent = err.word;
+        
+        if (err.suggestions.length > 0) {
+          span.title = `Did you mean: ${err.suggestions.join(', ')}?`;
+        } else {
+          span.title = 'Possible typo';
         }
+        
+        range.deleteContents();
+        range.insertNode(span);
+      } catch (e) {
+        // Range might be invalid, skip this error
+        console.log('Could not highlight:', err.word);
       }
     });
-  });
-
-  return errors;
+    
+    // Store results for popup
+    chrome.storage.session?.set({
+      [`spellcheck_results_${window.location.href}`]: {
+        errors: errors.map(e => ({ word: e.word, context: e.context, suggestions: e.suggestions })),
+        timestamp: Date.now(),
+        url: window.location.href
+      }
+    });
+    
+    return { success: true, errors: errors.map(e => ({ word: e.word, context: e.context, suggestions: e.suggestions })) };
+    
+  } catch (error) {
+    console.error('Spell check error:', error);
+    return { success: false, error: error.message, errors: [] };
+  } finally {
+    isChecking = false;
+  }
 }
 
 // Clear all highlights
 function clearHighlights() {
-  document.querySelectorAll('.spellcheck-highlight').forEach(el => {
+  const highlights = document.querySelectorAll('.spellcheck-highlight');
+  highlights.forEach(el => {
     const parent = el.parentNode;
     if (parent) {
       parent.insertBefore(document.createTextNode(el.textContent), el);
@@ -405,18 +535,20 @@ function clearHighlights() {
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request.action === 'check') {
     checkSpelling()
-      .then(errors => {
-        sendResponse({ success: true, errors });
-      })
-      .catch(error => {
-        console.error('Spell check error:', error);
-        sendResponse({ success: false, error: error.message });
-      });
+      .then(result => sendResponse(result))
+      .catch(error => sendResponse({ success: false, error: error.message, errors: [] }));
     return true; // Keep channel open for async
   } else if (request.action === 'clear') {
     clearHighlights();
     sendResponse({ success: true });
+  } else if (request.action === 'getStatus') {
+    sendResponse({ 
+      success: true, 
+      isChecking, 
+      dictionaryLoaded,
+      dictionarySize: dictionary?.size || 0
+    });
   }
 });
 
-console.log('Site Spellchecker content script loaded');
+console.log('Site Spellchecker content script loaded (optimized)');
