@@ -122,7 +122,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   // Set up upsell link
   const tabInfo = await getCurrentTab();
   if (tabInfo) {
-    upsellLink.href = `https://sitespellchecker.com?domain=${encodeURIComponent(tabInfo.domain)}&utm_source=extension&utm_medium=popup`;
+    upsellLink.href = `https://sitespellchecker.com/site-scans/checkout?domain=${encodeURIComponent(tabInfo.domain)}`;
   }
 
   // Check for cached results
