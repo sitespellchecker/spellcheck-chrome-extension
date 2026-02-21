@@ -39,25 +39,10 @@ header h1 {
   gap: 8px;
 }
 
-header h1::before {
-  content: '';
-  display: inline-block;
-  width: 24px;
-  height: 24px;
-  background: linear-gradient(135deg, #E8B4B4 0%, #d4a3a3 100%);
-  border-radius: 50%;
-  position: relative;
-}
-
-header h1::after {
-  content: '';
-  position: absolute;
-  width: 10px;
-  height: 10px;
-  border: 2px solid white;
-  border-radius: 50%;
-  margin-left: 7px;
-  margin-top: -14px;
+header h1 .logo {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
 }
 
 .subtitle {
