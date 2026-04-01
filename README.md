@@ -191,11 +191,9 @@ Edit `popup.html` line ~35:
 
 ## Privacy
 
-This extension:
-- ✅ Processes all data locally (dictionary loaded from extension files)
-- ✅ Does not send page content to external servers
-- ✅ Only communicates with sitespellchecker.com when user clicks the upsell link
-- ✅ Uses minimal permissions (activeTab, storage, scripting)
+This extension processes everything locally — no page content is ever sent to a server.
+
+See the full [Privacy Policy](PRIVACY.md) for details on permissions and data handling.
 
 ## License
 
