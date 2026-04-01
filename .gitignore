@@ -23,3 +23,6 @@ Thumbs.db
 # Local dev
 .env
 .env.local
+
+# Internal product/planning files
+.product/
