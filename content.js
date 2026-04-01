@@ -280,8 +280,8 @@ async function checkSpelling() {
   isChecking = true;
   
   try {
-    // Start loading Typo.js in background
-    loadTypoDictionary();
+    // Load Typo.js before checking (required for accurate results)
+    await loadTypoDictionary();
     
     const errors = [];
     const seenWords = new Set();
@@ -339,24 +339,30 @@ async function checkSpelling() {
     
     console.log(`Found ${errors.length} errors`);
     
-    // Apply highlights
-    errors.forEach(err => {
+    // Apply highlights — process in reverse index order per text node so earlier
+    // insertions don't invalidate the stored indices for later ones in the same node.
+    const sortedErrors = [...errors].sort((a, b) => {
+      if (a.textNode !== b.textNode) return 0;
+      return b.index - a.index;
+    });
+
+    sortedErrors.forEach(err => {
       try {
         const { textNode, index, wordLength } = err;
         const range = document.createRange();
         range.setStart(textNode, index);
         range.setEnd(textNode, index + wordLength);
-        
+
         const span = document.createElement('span');
         span.className = 'spellcheck-highlight';
         span.textContent = err.word;
-        
+
         if (err.suggestions.length > 0) {
           span.title = `Did you mean: ${err.suggestions.join(', ')}?`;
         } else {
           span.title = 'Possible typo';
         }
-        
+
         range.deleteContents();
         range.insertNode(span);
       } catch (e) {

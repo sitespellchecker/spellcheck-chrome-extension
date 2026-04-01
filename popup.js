@@ -94,23 +94,30 @@ function displayResults(errors) {
 // Show loading state
 function showLoading(message = 'Loading dictionary...') {
   const resultsDiv = document.getElementById('results');
-  resultsDiv.innerHTML = `
-    <div class="loading">
-      <div class="spinner"></div>
-      <p>${message}</p>
-    </div>
-  `;
+  const div = document.createElement('div');
+  div.className = 'loading';
+  const spinner = document.createElement('div');
+  spinner.className = 'spinner';
+  const p = document.createElement('p');
+  p.textContent = message;
+  div.appendChild(spinner);
+  div.appendChild(p);
+  resultsDiv.replaceChildren(div);
 }
 
 // Show error state
 function showError(message) {
   const resultsDiv = document.getElementById('results');
-  resultsDiv.innerHTML = `
-    <div class="error-message">
-      <span class="error-icon">⚠</span>
-      <p>${message}</p>
-    </div>
-  `;
+  const div = document.createElement('div');
+  div.className = 'error-message';
+  const icon = document.createElement('span');
+  icon.className = 'error-icon';
+  icon.textContent = '⚠';
+  const p = document.createElement('p');
+  p.textContent = message;
+  div.appendChild(icon);
+  div.appendChild(p);
+  resultsDiv.replaceChildren(div);
 }
 
 // Main initialization
