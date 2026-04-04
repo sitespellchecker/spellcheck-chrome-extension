@@ -35,8 +35,8 @@ A Chrome extension that spell checks web pages using Typo.js with Hunspell dicti
 
 ```
 Popup (popup.js)
-    ↓ (sendMessage)
-Content Script (content.js)
+    ↓ (chrome.scripting.executeScript / insertCSS)
+On-demand content script (content.js)
     ↓ (fetch)
 Dictionary Files (lib/)
     ↓ (Typo.js)
@@ -52,9 +52,8 @@ Popup Display
 ├── popup.html          # Extension popup UI
 ├── popup.css           # Popup styles
 ├── popup.js            # Popup logic
-├── content.js          # Content script for spell checking
+├── content.js          # On-demand content script for spell checking
 ├── content.css         # Styles for highlighted words
-├── background.js       # Service worker
 ├── lib/                # Third-party libraries
 │   ├── typo.js         # Typo.js spell checker
 │   ├── en_US.dic       # Hunspell dictionary (539KB)
@@ -72,7 +71,8 @@ Popup Display
 
 - **`web_accessible_resources`**: Makes dictionary files accessible to content scripts
 - **`chrome.tabs.sendMessage`**: Communication between popup and content script
-- **`chrome.scripting`**: Programmatic injection (though we use declarative content scripts)
+- **`activeTab`**: Grants temporary access only to the page the user explicitly scans
+- **`chrome.scripting`**: Injects the scanner only after the user clicks the scan button
 
 ### Typo.js Integration
 
@@ -84,8 +84,9 @@ The extension uses **Typo.js** with the full **Hunspell en_US dictionary**:
 
 ### Performance
 
+- **Lazy Injection**: The scanner is injected only when the user requests a scan
 - **Lazy Loading**: Dictionary loads only on first spell check
-- **Caching**: Dictionary stays loaded in content script until page refresh
+- **Caching**: Dictionary stays loaded in the injected page context until navigation
 - **Text Node Filtering**: Excludes scripts, styles, and already-highlighted elements
 - **Chunked Processing**: Words are processed in batches to avoid blocking
 

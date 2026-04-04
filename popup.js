@@ -2,6 +2,27 @@
 let currentResults = null;
 let currentUrl = null;
 
+async function ensurePageScanner(tabId) {
+  const [{ result: isInjected }] = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: () => Boolean(globalThis.__siteSpellCheckerContentScriptLoaded),
+  });
+
+  if (isInjected) {
+    return;
+  }
+
+  await chrome.scripting.insertCSS({
+    target: { tabId },
+    files: ['content.css'],
+  });
+
+  await chrome.scripting.executeScript({
+    target: { tabId },
+    files: ['lib/typo.js', 'content.js'],
+  });
+}
+
 // Get current tab info
 async function getCurrentTab() {
   try {
@@ -151,15 +172,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     checkBtn.disabled = true;
 
     try {
-      // Clear previous highlights
-      try {
-        await chrome.tabs.sendMessage(current.tabId, { action: 'clear' });
-      } catch (e) {
-        // Content script might not be loaded yet
-      }
-
       // Show checking status
       showLoading('Scanning page...');
+
+      await ensurePageScanner(current.tabId);
+
+      // Clear previous highlights
+      await chrome.tabs.sendMessage(current.tabId, { action: 'clear' });
 
       // Send check command with timeout
       const response = await Promise.race([
@@ -179,9 +198,9 @@ document.addEventListener('DOMContentLoaded', async () => {
       }
     } catch (error) {
       console.error('Error:', error);
-      
-      if (error.message.includes('Could not establish connection')) {
-        showError('Please refresh the page and try again');
+
+      if (error.message.includes('Cannot access') || error.message.includes('The extensions gallery cannot be scripted')) {
+        showError('This page does not allow extension access');
       } else {
         showError(error.message || 'Could not check page. Try refreshing.');
       }
@@ -189,17 +208,4 @@ document.addEventListener('DOMContentLoaded', async () => {
       checkBtn.disabled = false;
     }
   });
-});
-
-// Clear results when tab changes
-chrome.tabs.onActivated.addListener(() => {
-  currentResults = null;
-  currentUrl = null;
-});
-
-chrome.tabs.onUpdated.addListener((tabId, changeInfo) => {
-  if (changeInfo.url) {
-    currentResults = null;
-    currentUrl = null;
-  }
 });

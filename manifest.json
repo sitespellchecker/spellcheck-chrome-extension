@@ -8,9 +8,6 @@
     "scripting",
     "storage"
   ],
-  "host_permissions": [
-    "<all_urls>"
-  ],
   "web_accessible_resources": [
     {
       "resources": [
@@ -33,16 +30,5 @@
     "48": "icons/icon48.png",
     "128": "icons/icon128.png"
   },
-  "minimum_chrome_version": "102",
-  "background": {
-    "service_worker": "background.js"
-  },
-  "content_scripts": [
-    {
-      "matches": ["<all_urls>"],
-      "js": ["lib/typo.js", "content.js"],
-      "css": ["content.css"],
-      "run_at": "document_idle"
-    }
-  ]
+  "minimum_chrome_version": "102"
 }

@@ -1,3 +1,6 @@
+if (!globalThis.__siteSpellCheckerContentScriptLoaded) {
+  globalThis.__siteSpellCheckerContentScriptLoaded = true;
+
 // Site Spell Checker - Optimized spell checking
 let dictionary = null;
 let dictionaryLoading = false;
@@ -425,3 +428,4 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
 });
 
 console.log('Site Spell Checker content script loaded');
+}

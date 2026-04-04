@@ -20,10 +20,9 @@ Spell-check results are cached locally in your browser's session storage for up 
 
 | Permission | Why it's needed |
 |---|---|
-| `activeTab` | Read the text of the current tab to perform spell checking |
-| `scripting` | Inject the spell-check highlighter and styles into the page |
+| `activeTab` | Temporarily access the current tab only after you open the extension and start a scan |
+| `scripting` | Inject the spell-check scanner into the current tab only when you request a scan |
 | `storage` | Cache spell-check results locally for 5 minutes |
-| `host_permissions: <all_urls>` | Allow the content script to run on any page the user chooses to check |
 
 ## Third-Party Services
 

@@ -2,6 +2,16 @@
 
 All notable changes to the Site Spellchecker Chrome Extension.
 
+## [1.1.1] - 2026-04-03
+
+### Fixed
+- **Chrome Web Store compliance**: Removed unused persistent permissions and moved to an on-demand injection model
+- **Permissions**: Dropped broad `<all_urls>` host access and the unused background service worker
+
+### Changed
+- **Scanning flow**: The popup now injects the spell checker only after an explicit user action using `activeTab` and `chrome.scripting`
+- **Documentation**: Updated the privacy policy and README to match the narrower permission scope and runtime behavior
+
 ## [1.1.0] - 2026-02-21
 
 ### Fixed
