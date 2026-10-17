@@ -80,21 +80,57 @@ test('the URL check rejects look-alike hosts', () => {
 });
 
 // PRIVACY.md: "We collect nothing", no automatic network requests, page content never leaves the
-// browser. The only outbound link is the user-clicked upsell to sitespellchecker.com.
+// browser. The only outbound link is the user-clicked upsell to sitespellchecker.com, so a remote URL
+// may appear only on that link, and fetch() may only load the bundled dictionary files.
+const BUNDLED_FILE = /^chrome\.runtime\.getURL\(\s*['"]lib\/[\w.-]+['"]\s*\)$/;
+function networkOffenders(file, code) {
+  const offenders = [];
+  if (/sendBeacon\(|new XMLHttpRequest|new Image\(|new WebSocket|new EventSource|\b(?:gtag|mixpanel|posthog)\(|umami\.|plausible\(|google-analytics\.com|googletagmanager\.com|importScripts\(\s*['"]https?:/.test(code)) {
+    offenders.push(`${file}: phones home`);
+  }
+  for (const line of code.split('\n')) {
+    for (const url of line.match(/https?:\/\/[^\s'"`)]+/g) || []) {
+      try {
+        assertAllowedUrl(url, file);
+      } catch {
+        offenders.push(`${file}: unexpected URL ${url}`);
+        continue;
+      }
+      const upsell = file === 'popup.html' ? /\bid="upsellLink"/.test(line) : file === 'popup.js' && /^\s*upsellLink\.href\s*=/.test(line);
+      if (!upsell) offenders.push(`${file}: ${url} outside the user-clicked upsell link`);
+    }
+  }
+  for (const call of code.matchAll(/\bfetch\(\s*([^,)]+)/g)) {
+    const arg = call[1].trim();
+    if (/^e\.data\.\w+$/.test(arg) && file === 'lib/dict-worker.js' && !packaged.has(file)) continue; // unused, not shipped
+    if (!/^[A-Za-z_$][\w$]*$/.test(arg)) {
+      offenders.push(`${file}: fetch(${arg}) must take a variable set to a bundled file`);
+      continue;
+    }
+    const assignments = [...code.matchAll(new RegExp(`(?<![\\w$.])${arg.replace(/\$/g, '\\$')}\\s*=(?!=)\\s*([^;\\n]+)`, 'g'))].map((m) => m[1].trim());
+    if (!assignments.length || assignments.some((value) => !BUNDLED_FILE.test(value))) {
+      offenders.push(`${file}: fetch(${arg}) must load a bundled lib/ file, got ${assignments.join(' | ') || 'no assignment'}`);
+    }
+  }
+  return offenders;
+}
+
 test('the extension makes no network requests and has no tracking', () => {
-  for (const file of ['content.js', 'popup.js', 'lib/dict-worker.js']) {
-    const code = read(file);
-    assert.doesNotMatch(code, /sendBeacon\(|new XMLHttpRequest|new Image\(|new WebSocket|new EventSource|\b(?:gtag|mixpanel|posthog)\(|umami\.|plausible\(|google-analytics\.com|googletagmanager\.com|importScripts\(\s*['"]https?:/, `${file} must not phone home`);
-    for (const url of code.match(/https?:\/\/[^\s'"`)]+/g) || []) {
-      assertAllowedUrl(url, file);
-    }
-    for (const call of code.matchAll(/\bfetch\(\s*([^,)]+)/g)) {
-      assert.match(call[1].trim(), /^(affUrl|dicUrl|e\.data\.(affUrl|dicUrl))$/, `${file}: unexpected fetch(${call[1]})`);
-    }
+  const offenders = [];
+  for (const file of ['content.js', 'popup.js', 'popup.html', 'lib/dict-worker.js']) {
+    offenders.push(...networkOffenders(file, read(file)));
   }
-  for (const url of read('popup.html').match(/https?:\/\/[^\s"]+/g) || []) {
-    assertAllowedUrl(url, 'popup.html');
-  }
+  assert.deepEqual(offenders, []);
+});
+
+test('the network check catches remote fetches and stray URLs (proof the check works)', () => {
+  const content = read('content.js');
+  const remote = content.replace(/const affUrl = [^;]+;/, "const affUrl = 'https://sitespellchecker.com/collect';");
+  assert.notEqual(remote, content, 'content.js still assigns affUrl');
+  assert.notDeepEqual(networkOffenders('content.js', remote), []);
+  assert.notDeepEqual(networkOffenders('content.js', `${content}\nfetch('https://sitespellchecker.com/collect');`), []);
+  assert.notDeepEqual(networkOffenders('content.js', `${content}\nconst ping = 'https://sitespellchecker.com/collect';`), []);
+  assert.notDeepEqual(networkOffenders('popup.js', `${read('popup.js')}\nconst affUrl = chrome.runtime.getURL('lib/en_US.aff');\nfetch(affUrl);\naffUrl = 'https://x.example/';`), []);
 });
 
 const CLAIMS = {

@@ -16,5 +16,6 @@ files=(
   icons/icon16.png icons/icon48.png icons/icon128.png
 )
 rm -f "$out"
-(cd "$root" && zip -qX "$out" "${files[@]}")
+# -MM (--must-match): fail instead of silently leaving out a missing or unreadable file.
+(cd "$root" && zip -qX -MM "$out" "${files[@]}")
 echo "Created $out"
