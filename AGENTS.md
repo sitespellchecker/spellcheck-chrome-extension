@@ -2,17 +2,17 @@
 
 # Standing rules
 
-Each rule names its check. `npm run check` runs `node --check` on every script and `tests/*.test.js`. `guardrails.yml` runs it on every PR and builds the store zip. `release.yml` runs it before upload.
+Each rule names its check. `npm run check` runs `node --check` on every script and `tests/*.test.js`; run it locally before every PR. **CI is pending:** the proposed `.github/workflows/guardrails.yml` (runs `npm run check` and checks the zip contents on PRs) and the `release.yml` change (runs the check, then builds the zip with `scripts/package.sh`) are in the PR that added this file and aren't in the repo yet. Until they land, PRs aren't checked and `release.yml` still builds the old pattern-based zip.
 
 | Rule | Check |
 | --- | --- |
 | Open PRs as drafts. Andy reviews and merges; never mark ready, merge, tag a release (`v*` tags publish to the Chrome Web Store) or run the release workflow yourself. | Review |
 | No `[DO NOT MERGE]` or similar in PR titles. Use a draft instead. | Review |
-| Say what actually ran. This repo used to have `"test": "echo 'No tests configured'"`, and this file described TypeScript, Jest and ESLint that never existed. | `npm run check` in CI |
+| Say what actually ran. This repo used to have `"test": "echo 'No tests configured'"`, and this file described TypeScript, Jest and ESLint that never existed. | `npm run check` (local until `guardrails.yml` lands) |
 | Privacy is a product claim (PRIVACY.md: "We collect nothing", no automatic network requests). The extension may only fetch its own dictionary files; the only outbound link is the user-clicked upsell to sitespellchecker.com. No analytics or telemetry. | `tests/guardrails.test.js` |
 | Keep permissions minimal (1.1.1 was a Web Store rejection fix): `activeTab`, `scripting`, `storage` only, no host permissions, no `content_scripts`, no background worker. Every permission is explained in PRIVACY.md. | `tests/guardrails.test.js` |
 | Bump the version in `manifest.json`, `package.json` and a new `CHANGELOG.md` entry together. | `tests/guardrails.test.js` |
-| The store zip is the allowlist in `scripts/package.sh`. Add new runtime files there; dev files (`.agents/`, `.cursor/`, `tests/`, `package.json`, docs) never ship. | `tests/guardrails.test.js`, `guardrails.yml` |
+| The store zip is the allowlist in `scripts/package.sh`. Add new runtime files there; dev files (`.agents/`, `.cursor/`, `tests/`, `package.json`, docs) never ship. | `tests/guardrails.test.js`; `guardrails.yml` once added |
 | Never invent numbers, ratings or claims in the store listing, popup or docs. Every claim needs a source and Andy's OK. | `tests/guardrails.test.js` |
 | Page text is untrusted: render it with `textContent` or `escapeHtml()`, never raw `innerHTML`. | Review |
 | Bring a branch up to date by merging `main`. Never force-push or rewrite pushed history. | Review |

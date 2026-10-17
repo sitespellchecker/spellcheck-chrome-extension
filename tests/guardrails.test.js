@@ -57,6 +57,28 @@ test('every file the extension loads exists and ships in the zip', () => {
   }
 });
 
+// Compare the parsed origin exactly: a prefix check would accept sitespellchecker.com.example.org
+// or sitespellchecker.com@example.org. Template-literal placeholders (${...}) are cut off first.
+const ALLOWED_ORIGIN = 'https://sitespellchecker.com';
+function assertAllowedUrl(raw, file) {
+  const url = raw.split('${')[0];
+  let origin = null;
+  try {
+    const parsed = new URL(url);
+    origin = parsed.username || parsed.password ? null : parsed.origin;
+  } catch {
+    origin = null;
+  }
+  assert.equal(origin, ALLOWED_ORIGIN, `${file}: unexpected URL ${raw}`);
+}
+
+test('the URL check rejects look-alike hosts', () => {
+  for (const bad of ['https://sitespellchecker.com.example.org/collect', 'https://sitespellchecker.com@example.org/collect', 'http://sitespellchecker.com/', 'https://evil.com/?https://sitespellchecker.com']) {
+    assert.throws(() => assertAllowedUrl(bad, 'test'), undefined, bad);
+  }
+  assertAllowedUrl('https://sitespellchecker.com/site-scans/checkout?domain=${x}', 'test');
+});
+
 // PRIVACY.md: "We collect nothing", no automatic network requests, page content never leaves the
 // browser. The only outbound link is the user-clicked upsell to sitespellchecker.com.
 test('the extension makes no network requests and has no tracking', () => {
@@ -64,14 +86,14 @@ test('the extension makes no network requests and has no tracking', () => {
     const code = read(file);
     assert.doesNotMatch(code, /sendBeacon\(|new XMLHttpRequest|new Image\(|new WebSocket|new EventSource|\b(?:gtag|mixpanel|posthog)\(|umami\.|plausible\(|google-analytics\.com|googletagmanager\.com|importScripts\(\s*['"]https?:/, `${file} must not phone home`);
     for (const url of code.match(/https?:\/\/[^\s'"`)]+/g) || []) {
-      assert.match(url, /^https:\/\/sitespellchecker\.com\//, `${file}: unexpected URL ${url}`);
+      assertAllowedUrl(url, file);
     }
     for (const call of code.matchAll(/\bfetch\(\s*([^,)]+)/g)) {
       assert.match(call[1].trim(), /^(affUrl|dicUrl|e\.data\.(affUrl|dicUrl))$/, `${file}: unexpected fetch(${call[1]})`);
     }
   }
   for (const url of read('popup.html').match(/https?:\/\/[^\s"]+/g) || []) {
-    assert.match(url, /^https:\/\/sitespellchecker\.com/, `popup.html: unexpected URL ${url}`);
+    assertAllowedUrl(url, 'popup.html');
   }
 });
 
