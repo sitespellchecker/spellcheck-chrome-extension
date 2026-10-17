@@ -23,6 +23,9 @@ test('every version number matches manifest.json', () => {
 test('permissions stay minimal and documented', () => {
   const documented = [...read('PRIVACY.md').matchAll(/^\| `([^`]+)` \|/gm)].map((m) => m[1]).sort();
   assert.deepEqual([...manifest.permissions].sort(), documented, 'manifest permissions must match the PRIVACY.md table');
+  // The approved set itself (#1, Copilot): documenting a new permission is not approval.
+  assert.deepEqual([...manifest.permissions].sort(), ['activeTab', 'scripting', 'storage'], 'only activeTab, scripting and storage are approved');
+  assert.equal(manifest.optional_permissions, undefined, 'no optional_permissions');
   assert.equal(manifest.host_permissions, undefined, 'no host_permissions; use activeTab');
   assert.equal(manifest.optional_host_permissions, undefined);
   assert.equal(manifest.content_scripts, undefined, 'inject on demand with chrome.scripting, not on every page');
@@ -108,6 +111,14 @@ function networkOffenders(file, code) {
       continue;
     }
     const assignments = [...code.matchAll(new RegExp(`(?<![\\w$.])${arg.replace(/\$/g, '\\$')}\\s*=(?!=)\\s*([^;\\n]+)`, 'g'))].map((m) => m[1].trim());
+    // A parameter (or destructured/loop binding) with the same name shadows the bundled-file
+    // variable, and its value can't be checked statically (#1, Copilot): reject it.
+    const name = arg.replace(/\$/g, '\\$');
+    const shadowed = new RegExp(`(?:function\\b[^(]*\\(|\\(|,)\\s*[^()]*\\b${name}\\b[^()]*\\)\\s*(?:=>|\\{)|\\b${name}\\s*=>|\\b(?:for\\s*\\(\\s*(?:const|let|var)\\s+${name}\\b|catch\\s*\\(\\s*${name}\\b)`).test(code);
+    if (shadowed) {
+      offenders.push(`${file}: fetch(${arg}) argument is also a parameter or loop binding; use a uniquely named bundled-file variable`);
+      continue;
+    }
     if (!assignments.length || assignments.some((value) => !BUNDLED_FILE.test(value))) {
       offenders.push(`${file}: fetch(${arg}) must load a bundled lib/ file, got ${assignments.join(' | ') || 'no assignment'}`);
     }
@@ -131,6 +142,9 @@ test('the network check catches remote fetches and stray URLs (proof the check w
   assert.notDeepEqual(networkOffenders('content.js', `${content}\nfetch('https://sitespellchecker.com/collect');`), []);
   assert.notDeepEqual(networkOffenders('content.js', `${content}\nconst ping = 'https://sitespellchecker.com/collect';`), []);
   assert.notDeepEqual(networkOffenders('popup.js', `${read('popup.js')}\nconst affUrl = chrome.runtime.getURL('lib/en_US.aff');\nfetch(affUrl);\naffUrl = 'https://x.example/';`), []);
+  const shadow = "const affUrl = chrome.runtime.getURL('lib/en_US.aff');\nfunction load(affUrl) { return fetch(affUrl); }\nload(window.location.href);";
+  assert.notDeepEqual(networkOffenders('content.js', shadow), [], 'shadowed parameter');
+  assert.notDeepEqual(networkOffenders('content.js', "const affUrl = chrome.runtime.getURL('lib/en_US.aff');\nconst load = (affUrl) => fetch(affUrl);"), [], 'shadowed arrow parameter');
 });
 
 const CLAIMS = {
