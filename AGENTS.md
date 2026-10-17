@@ -14,6 +14,7 @@ Each rule names its check. `npm run check` runs `node --check` on every script a
 | Bump the version in `manifest.json`, `package.json` and a new `CHANGELOG.md` entry together. | `tests/guardrails.test.js` |
 | The store zip is the allowlist in `scripts/package.sh`. Add new runtime files there; dev files (`.agents/`, `.cursor/`, `tests/`, `package.json`, docs) never ship. | `tests/guardrails.test.js`; `guardrails.yml` once added |
 | Never invent numbers, ratings or claims in the store listing, popup or docs. Every claim needs a source and Andy's OK. | `tests/guardrails.test.js` |
+| It checks spelling only. Popup, manifest and docs say "spelling", never "grammar" or "and more". | `tests/guardrails.test.js` |
 | Page text is untrusted: render it with `textContent` or `escapeHtml()`, never raw `innerHTML`. | Review |
 | Bring a branch up to date by merging `main`. Never force-push or rewrite pushed history. | Review |
 

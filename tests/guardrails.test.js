@@ -122,3 +122,13 @@ test('the claims patterns catch past mistakes', () => {
     assert.ok((copy.match(CLAIMS[name]) || []).length > 0, `${name} should catch "${copy}"`);
   }
 });
+
+// The extension checks spelling only (Typo.js with an en_US dictionary). The popup used to promise
+// "grammar mistakes, and more" (ops decision 2026-10-17: say spelling). Don't claim grammar checking.
+test('user-facing copy describes spell checking, not grammar checking', () => {
+  const sources = { 'README.md': read('README.md'), 'popup.html': read('popup.html'), 'manifest.json': `${manifest.name} ${manifest.description}`, 'package.json': read('package.json') };
+  for (const [file, text] of Object.entries(sources)) {
+    assert.doesNotMatch(text, /\bgrammar|\bgrammatical|\band more\b/i, `${file} claims more than spell checking`);
+  }
+  assert.match(read('popup.html'), /\bspelling\b/i, 'the popup says what it checks: spelling');
+});
