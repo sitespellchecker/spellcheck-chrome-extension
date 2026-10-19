@@ -1,121 +1,43 @@
-# AGENTS.md - Site Spellchecker Extension
+# AGENTS.md - Site Spell Checker Chrome extension
 
-Guidelines for agentic coding agents working on this Chrome extension project.
+# Standing rules
 
-## Project Overview
+Each rule names its check. `npm run check` runs `node --check` on every script and `tests/*.test.js`; run it locally before every PR. **CI is pending:** the proposed `.github/workflows/guardrails.yml` (runs `npm run check` and checks the zip contents on PRs) and the `release.yml` change (runs the check, then builds the zip with `scripts/package.sh`) are in the PR that added this file and aren't in the repo yet. Until they land, PRs aren't checked and `release.yml` still builds the old pattern-based zip.
 
-This is a Chrome browser extension (Manifest V3) for spellchecking websites. Built with TypeScript and modern web extension APIs.
+| Rule | Check |
+| --- | --- |
+| Open PRs as drafts. Andy reviews and merges; never mark ready, merge, tag a release (`v*` tags publish to the Chrome Web Store) or run the release workflow yourself. | Review |
+| No `[DO NOT MERGE]` or similar in PR titles. Use a draft instead. | Review |
+| Say what actually ran. This repo used to have `"test": "echo 'No tests configured'"`, and this file described TypeScript, Jest and ESLint that never existed. | `npm run check` (local until `guardrails.yml` lands) |
+| Privacy is a product claim (PRIVACY.md: "We collect nothing", no automatic network requests). The extension may only fetch its own dictionary files; the only outbound link is the user-clicked upsell to sitespellchecker.com. No analytics or telemetry. | `tests/guardrails.test.js` |
+| Keep permissions minimal (1.1.1 was a Web Store rejection fix): `activeTab`, `scripting`, `storage` only, no host permissions, no `content_scripts`, no background worker. Every permission is explained in PRIVACY.md. | `tests/guardrails.test.js` |
+| Bump the version in `manifest.json`, `package.json` and a new `CHANGELOG.md` entry together. | `tests/guardrails.test.js` |
+| The store zip is the allowlist in `scripts/package.sh`. Add new runtime files there; dev files (`.agents/`, `.cursor/`, `tests/`, `package.json`, docs) never ship. | `tests/guardrails.test.js`; `guardrails.yml` once added |
+| Never invent numbers, ratings or claims in the store listing, popup or docs. Every claim needs a source and Andy's OK. | `tests/guardrails.test.js` |
+| It checks spelling only. Popup, manifest and docs say "spelling", never "grammar" or "and more". | `tests/guardrails.test.js` |
+| Page text is untrusted: render it with `textContent` or `escapeHtml()`, never raw `innerHTML`. | Review |
+| Bring a branch up to date by merging `main`. Never force-push or rewrite pushed history. | Review |
 
-## Build Commands
+## Project overview
 
-```bash
-# Development build with hot reload
-npm run dev
+Manifest V3 extension in plain JavaScript (no build step, no TypeScript, no bundler). `popup.js` injects `lib/typo.js` + `content.js` and `content.css` into the active tab on demand. `content.js` loads the bundled Hunspell dictionary (`lib/en_US.aff`/`.dic`) with Typo.js, highlights misspellings, and caches results in `chrome.storage.session` for 5 minutes.
 
-# Production build
-npm run build
-
-# Watch mode
-npm run watch
-```
-
-## Test Commands
-
-```bash
-# Run all tests
-npm test
-
-# Run single test file
-npm test -- <filename>.test.ts
-
-# Run with coverage
-npm run test:coverage
-
-# Watch mode
-npm run test:watch
-```
-
-## Lint Commands
+## Commands
 
 ```bash
-# Run ESLint
-npm run lint
-
-# Fix linting issues
-npm run lint:fix
-
-# Type checking
-npm run typecheck
-
-# Run all checks (lint + typecheck)
-npm run check
+npm run check   # node --check on every script + node --test tests/*.test.js
+npm test        # tests only
+npm run build   # bash scripts/package.sh -> dist/site-spellchecker-<version>.zip
 ```
 
-## Code Style Guidelines
-
-### TypeScript
-
-- Use strict TypeScript with full type annotations
-- Prefer `type` over `interface` for object shapes
-- Use explicit return types on exported functions
-- Avoid `any` - use `unknown` with type guards instead
-- Enable strict mode in tsconfig.json
-
-### Naming Conventions
-
-- Files: kebab-case (e.g., `spell-checker.ts`)
-- Components/functions: camelCase (e.g., `checkSpelling()`)
-- Constants: UPPER_SNAKE_CASE for true constants
-- Types/interfaces: PascalCase with descriptive names (e.g., `SpellingError`)
-- Chrome API callbacks: Prefix with `handle` (e.g., `handleMessage`)
-
-### Imports
-
-```typescript
-// Order: built-in → external → internal → relative
-import { useState } from 'react';
-import { debounce } from 'lodash';
-import { storage } from '@/utils/storage';
-import { SpellChecker } from './spell-checker';
-
-// Use path aliases for src/ imports (@/)
-// Group imports by category with blank lines between
-```
-
-### Formatting
-
-- 2 spaces for indentation
-- Single quotes for strings
-- Trailing commas in multi-line objects/arrays
-- 100 character line limit
-- Use Prettier for consistent formatting
-
-### Error Handling
-
-```typescript
-// Always handle errors in async functions
-try {
-  const result = await chrome.storage.local.get('settings');
-} catch (error) {
-  console.error('Failed to load settings:', error);
-  // Provide fallback or re-throw with context
-}
-
-// Use custom error types for domain-specific errors
-class SpellCheckError extends Error {
-  constructor(message: string, public code: string) {
-    super(message);
-    this.name = 'SpellCheckError';
-  }
-}
-```
+Load unpacked from the repo root in `chrome://extensions` for manual testing.
 
 ## Chrome Extension Best Practices
 
 ### Manifest V3
 
 - Follow strict CSP (Content Security Policy)
-- Use service worker for background scripts
+- Background work needs a service worker; this extension deliberately has none (see Standing rules)
 - Declare minimal required permissions in manifest
 - Use `chrome.action` API for browser actions
 
@@ -133,33 +55,6 @@ class SpellCheckError extends Error {
 - Throttle storage writes
 - Clean up event listeners in content scripts
 
-### Architecture
-
-```
-src/
-├── background/          # Service worker
-│   └── index.ts
-├── content/            # Content scripts
-│   ├── spell-checker.ts
-│   └── highlighter.ts
-├── popup/              # Extension popup UI
-│   ├── App.tsx
-│   └── index.tsx
-├── utils/              # Shared utilities
-│   ├── storage.ts
-│   └── dom.ts
-├── types/              # TypeScript types
-│   └── index.ts
-└── manifest.json
-```
-
-## Testing Guidelines
-
-- Unit test pure utility functions
-- Mock Chrome APIs in tests
-- Test error scenarios and edge cases
-- Use Jest with jsdom for DOM testing
-
 ## Git Workflow
 
 ```bash
@@ -171,16 +66,3 @@ feat(spell-checker): add real-time checking
 fix(popup): resolve settings save issue
 docs(readme): update installation instructions
 ```
-
-## Pre-commit Checklist
-
-Before committing, run:
-```bash
-npm run check
-```
-
-This ensures:
-- All TypeScript compiles without errors
-- ESLint passes
-- Tests pass
-- Code is properly formatted

@@ -1,20 +1,19 @@
 {
   "name": "site-spellchecker",
-  "version": "1.0.0",
+  "version": "1.1.1",
   "description": "Chrome extension for spell checking web pages with upsell to full site checking",
   "scripts": {
-    "build": "echo 'Building extension...' && npm run generate-icons",
+    "build": "bash scripts/package.sh",
     "dev": "echo 'Extension files ready for loading in Chrome'",
     "generate-icons": "echo 'Please convert icons/icon.svg to PNG files: icon16.png, icon48.png, icon128.png'",
-    "lint": "echo 'No linter configured'",
-    "test": "echo 'No tests configured'",
+    "lint": "for f in content.js popup.js lib/typo.js lib/dict-worker.js tests/*.js; do node --check \"$f\" || exit 1; done",
+    "test": "node --test tests/*.test.js",
     "check": "npm run lint && npm run test"
   },
   "keywords": [
     "chrome-extension",
     "spell-checker",
-    "typo",
-    "grammar"
+    "typo"
   ],
   "author": "",
   "license": "MIT",
